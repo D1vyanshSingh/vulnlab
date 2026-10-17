@@ -5,7 +5,7 @@
 vulnlab spins up complete fake hosts — each a coherent set of insecure
 services — on real listening ports, so your scanners, exploitation tools and
 pipelines have something honest to shoot at. It is a standalone companion to a
-network vulnerability scanner like [vulnscan](https://github.com/D1vyanshSingh).
+network vulnerability scanner like [vulnscan](https://github.com/D1vyanshSingh/vulnscan).
 
 ```
 python -m vulnlab list                     # show the catalog
