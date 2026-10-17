@@ -1,0 +1,94 @@
+# Real-container vulnerable lab (see docker/README.md).
+# Start:      docker compose up -d
+# Stop:       docker compose down
+# Everything binds 127.0.0.1 only.
+name: vulnlab
+
+services:
+  # ------------------------------------------------------------------
+  # old-office-server (2008 SOHO box)
+  # ------------------------------------------------------------------
+  office-redis:
+    image: redis:5.0.14
+    ports: ["127.0.0.1:6379:6379"]      # default image: no requirepass
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  office-web:
+    image: php:5.6-apache
+    ports:
+      - "127.0.0.1:2080:80"             # host 80 is usually reserved on Windows
+    volumes:
+      - ./sites/office-web:/var/www/html:ro
+    environment:
+      - APACHE_SERVER_NAME=old-office.lab
+
+  office-ftp:
+    image: fauria/vsftpd
+    ports: ["127.0.0.1:2121:21"]
+    environment:
+      - FTP_USER=anonymous
+      - FTP_PASS=
+      - ANONYMOUS_ENABLE=YES
+      - LOCAL_ENABLE=YES
+
+  # ------------------------------------------------------------------
+  # legacy-web-app (path traversal legacy stack)
+  # ------------------------------------------------------------------
+  legacy-apache:
+    image: httpd:2.4.49
+    ports: ["127.0.0.1:8080:80"]
+    volumes:
+      - ./sites/legacy/cgi-bin:/usr/local/apache2/cgi-bin:ro
+
+  legacy-nginx:
+    image: nginx:1.14.0
+    ports: ["127.0.0.1:8181:80"]
+    volumes:
+      - ./sites/legacy-nginx:/usr/share/nginx/html:ro
+
+  # ------------------------------------------------------------------
+  # cloud-leak-box (misconfigured cloud node)
+  # ------------------------------------------------------------------
+  leak-es:
+    image: elasticsearch:7.17.1
+    ports: ["127.0.0.1:9200:9200"]
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false    # ← the planted weakness
+
+  leak-kibana:
+    image: kibana:7.17.1
+    ports: ["127.0.0.1:5601:5601"]
+    environment:
+      - ELASTICSEARCH_HOSTS=http://leak-es:9200
+
+  leak-dockerd:
+    image: docker:24-dind
+    privileged: true
+    command: ["--host", "tcp://0.0.0.0:2375", "--host", "unix:///var/run/docker.sock"]
+    ports: ["127.0.0.1:2375:2375"]      # plain HTTP Docker API — loopback only!
+
+  leak-mongo:
+    image: mongo:4.0.28
+    ports: ["127.0.0.1:27017:27017"]
+    # no user setup → unauthenticated
+
+  # ------------------------------------------------------------------
+  # db-dumpster (EOL databases, no auth)
+  # ------------------------------------------------------------------
+  db-mysql:
+    image: mysql:5.7.42
+    ports: ["127.0.0.1:13306:3306"]
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes  # ← planted weakness
+
+  db-postgres:
+    image: postgres:9.6.24
+    ports: ["127.0.0.1:15432:5432"]
+    environment:
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=admin
+
+  db-memcached:
+    image: memcached:1.6.23-alpine
+    ports: ["127.0.0.1:11211:11211"]    # no SASL by default
